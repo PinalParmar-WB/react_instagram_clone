@@ -1,0 +1,108 @@
+/* CreatePost.css */
+
+/* Image Preview Grid */
+.image-preview-container {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+    margin-top: 15px;
+}
+
+.image-preview {
+    width: 100px;
+    height: 100px;
+    object-fit: cover;
+    border-radius: 12px;
+    border: 2px solid var(--clr-purple-light); /* Uses your light purple var */
+}
+
+/* Tag Badges (Pills) */
+.tag-badge {
+    background-color: var(--clr-purple-light);
+    color: #fff;
+    padding: 6px 14px;
+    border-radius: 20px;
+    margin-right: 8px;
+    margin-bottom: 8px;
+    display: inline-flex;
+    align-items: center;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.tag-badge:hover {
+    background-color: var(--clr-purple); /* Darkens on hover */
+}
+
+.tag-remove {
+    cursor: pointer;
+    margin-left: 8px;
+    font-weight: bold;
+    font-size: 16px;
+    line-height: 1;
+}
+
+/* Override Bootstrap Form Focus to match your theme */
+.form-control:focus {
+    border-color: var(--clr-purple);
+    box-shadow: 0 0 0 0.25rem rgba(156, 60, 240, 0.25); /* Purple shadow */
+}
+
+/* File Input Customization (Optional - makes the file input look cleaner) */
+input[type="file"]::file-selector-button {
+    background-color: var(--clr-purple-light);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    margin-right: 10px;
+    padding: 5px 10px;
+    transition: .3s;
+}
+
+input[type="file"]::file-selector-button:hover {
+    background-color: var(--clr-purple);
+    cursor: pointer;
+}
+
+/* Wrapper for image + delete button */
+.preview-wrapper {
+    position: relative;
+    width: 100px;
+    height: 100px;
+}
+
+/* The actual image */
+.image-preview {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 12px;
+    border: 2px solid var(--clr-purple-light);
+}
+
+/* The small Cross (X) Button */
+.btn-remove-img {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background-color: #dc3545; /* Red color */
+    color: white;
+    border: 2px solid white;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    transition: transform 0.2s;
+}
+
+.btn-remove-img:hover {
+    transform: scale(1.1);
+    background-color: #c82333;
+}
