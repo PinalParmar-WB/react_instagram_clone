@@ -149,7 +149,7 @@ const EditPost = () => {
 
       if (data.success) {
         alert("Post updated successfully!");
-        navigate(`/post/${postId}`); // Go back to details page
+        navigate('/profile');
       } else {
         alert(data.message || "Failed to update post.");
       }

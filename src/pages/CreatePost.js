@@ -101,6 +101,7 @@ const CreatePost = () => {
         setImages([]);
         setPreviews([]);
         setTags([]);
+        navigate('/profile');
       } else {
         alert(data.message || "Failed to create post. Try smaller images.");
       }

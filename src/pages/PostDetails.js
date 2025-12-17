@@ -284,6 +284,13 @@ const PostDetails = () => {
                 <img
                   src={post.author?.account?.avatar?.url || "https://cdn-icons-png.flaticon.com/512/149/149071.png"}
                   alt={post.author.account.username}
+                  onError={(e) => {
+                          e.target.onerror = null; // Prevents looping if the fallback also fails
+                          // Use UI Avatars to generate an image based on their username
+                          e.target.src = `https://ui-avatars.com/api/?name=${post.author.account.username || 'User'}&background=random`;
+                          // OR use a static local image:
+                          // e.target.src = "https://cdn-icons-png.flaticon.com/512/149/149071.png";
+                        }}
                 />
               </div>
               <div>
@@ -361,6 +368,13 @@ const PostDetails = () => {
                           src={comment.author?.account?.avatar?.url || "https://cdn-icons-png.flaticon.com/512/149/149071.png"}
                           alt="avatar"
                           style={{width:'100%', height:'100%'}}
+                          onError={(e) => {
+                          e.target.onerror = null; // Prevents looping if the fallback also fails
+                          // Use UI Avatars to generate an image based on their username
+                          e.target.src = `https://ui-avatars.com/api/?name=${comment.author?.account?.username || 'User'}&background=random`;
+                          // OR use a static local image:
+                          // e.target.src = "https://cdn-icons-png.flaticon.com/512/149/149071.png";
+                        }}
                         />
                       </div>
                       
