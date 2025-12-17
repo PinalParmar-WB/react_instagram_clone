@@ -4,26 +4,55 @@ import { useNavigate } from "react-router-dom";
 
 const Feed = () => {
   const navigate = useNavigate();
+  const user = useSelector((store) => store.auth.user);
+  const token = useSelector((store) => store.auth.accessToken);
 
   // --- States ---
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(false);
+  
+  // This Set will store the Profile IDs of everyone the user follows
+  const [followingSet, setFollowingSet] = useState(new Set());
+  
   const [page, setPage] = useState(1);
   const [hasNextPage, setHasNextPage] = useState(true);
 
   // Filter States
-  const [filterType, setFilterType] = useState("all"); // 'all', 'username', 'tag'
+  const [filterType, setFilterType] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Refs for Throttling and State Access inside Event Listeners
-  const isFetchingRef = useRef(false); // To prevent double calling API
+  const isFetchingRef = useRef(false);
 
-  // --- Helper to get Token ---
-  const token = useSelector((store) => store.auth.accessToken);
+  // 1. Fetch the User's Following List (To know who we are following)
+  // We fetch this ONCE when the component mounts.
+  const fetchFollowingList = async () => {
+    if (!user?.username) return;
+    
+    try {
+      const baseUrl = process.env.REACT_APP_BASE_URL;
+      // Fetching page 1 with a larger limit to get most followings
+      // (In a real massive app, you'd handle pagination for this list too)
+      const url = `${baseUrl}/social-media/follow/list/following/${user.username}?page=1&limit=100`;
 
-  // --- 1. The Fetch Function (Updated for Pagination) ---
-  const fetchPosts = async (pageNum, isNewSearch = false) => {
-    // Prevent fetching if already loading or no more pages (unless it's a new search)
+      const response = await fetch(url, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}`, accept: "application/json" },
+      });
+      const res = await response.json();
+
+      if (res.success) {
+        // Extract the PROFILE IDs from the following list
+        // based on your JSON: item.profile._id is the ID we need to match with post.author._id
+        const ids = new Set(res.data.following.map(item => item.profile._id));
+        setFollowingSet(ids);
+      }
+    } catch (error) {
+      console.error("Error fetching following list:", error);
+    }
+  };
+
+  // 2. Fetch Posts
+  const fetchPosts = async (pageNum, isNewSearch = false, typeOverride = null, queryOverride = null) => {
     if (isFetchingRef.current) return;
     if (!isNewSearch && !hasNextPage) return;
 
@@ -31,28 +60,31 @@ const Feed = () => {
     isFetchingRef.current = true;
 
     try {
-      let url = `${process.env.REACT_APP_BASE_URL}/social-media/posts?page=${pageNum}&limit=10`;
+      const baseUrl = process.env.REACT_APP_BASE_URL;
+      const currentFilterType = typeOverride !== null ? typeOverride : filterType;
+      const currentSearchQuery = queryOverride !== null ? queryOverride : searchQuery;
 
-      if (filterType === "username" && searchQuery.trim()) {
-        url = `${process.env.REACT_APP_BASE_URL}/social-media/posts/get/u/${searchQuery.trim()}?page=${pageNum}&limit=10`;
-      } else if (filterType === "tag" && searchQuery.trim()) {
-        url = `${process.env.REACT_APP_BASE_URL}/social-media/posts/get/t/${searchQuery.trim()}?page=${pageNum}&limit=10`;
+      let url = `${baseUrl}/social-media/posts?page=${pageNum}&limit=10`;
+
+      if (currentFilterType === "username" && currentSearchQuery.trim()) {
+        url = `${baseUrl}/social-media/posts/get/u/${currentSearchQuery.trim()}?page=${pageNum}&limit=10`;
+      } else if (currentFilterType === "tag" && currentSearchQuery.trim()) {
+        url = `${baseUrl}/social-media/posts/get/t/${currentSearchQuery.trim()}?page=${pageNum}&limit=10`;
       }
 
       const response = await fetch(url, {
         method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          accept: "application/json",
-        },
+        headers: { Authorization: `Bearer ${token}`, accept: "application/json" },
       });
       const res = await response.json();
 
       if (res.success) {
+        const newPosts = res.data.posts; // We keep posts raw, we calculate following status in Render
+
         if (isNewSearch) {
-          setPosts(res.data.posts); // Replace data
+          setPosts(newPosts);
         } else {
-          setPosts((prev) => [...prev, ...res.data.posts]); // Append data
+          setPosts((prev) => [...prev, ...newPosts]);
         }
         setHasNextPage(res.data.hasNextPage);
       } else {
@@ -66,8 +98,69 @@ const Feed = () => {
     }
   };
 
-  // --- 2. Throttling Utility Function ---
-  // This ensures 'func' is only called once every 'limit' milliseconds
+  // 3. Handle Follow / Unfollow
+  const handleFollowToggle = async (e, authorProfileId, authorAccountId) => {
+    e.stopPropagation();
+    try {
+      const baseUrl = process.env.REACT_APP_BASE_URL;
+      // Usually API requires the Account ID to follow
+      const response = await fetch(`${baseUrl}/social-media/follow/${authorAccountId}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, accept: "application/json" },
+      });
+      const res = await response.json();
+
+      if (res.success) {
+        const isNowFollowing = res.data.following; // true or false
+        
+        // Update our local Set of IDs immediately
+        setFollowingSet(prevSet => {
+            const newSet = new Set(prevSet);
+            if (isNowFollowing) {
+                newSet.add(authorProfileId); // Add Profile ID
+            } else {
+                newSet.delete(authorProfileId); // Remove Profile ID
+            }
+            return newSet;
+        });
+      }
+    } catch (error) {
+      console.error("Error toggling follow:", error);
+    }
+  };
+
+  // --- Handle Bookmark ---
+  const handleBookmark = async (e, postId) => {
+    e.stopPropagation();
+    try {
+      const baseUrl = process.env.REACT_APP_BASE_URL;
+      const response = await fetch(`${baseUrl}/social-media/bookmarks/${postId}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, accept: "application/json" },
+      });
+      const res = await response.json();
+
+      if (res.success) {
+        setPosts((prevPosts) =>
+          prevPosts.map((post) =>
+            post._id === postId ? { ...post, isBookmarked: res.data.isBookmarked } : post
+          )
+        );
+      }
+    } catch (error) {
+      console.error("Error bookmarking post:", error);
+    }
+  };
+
+  // --- Effects ---
+  
+  // Initial Load: Fetch Following List FIRST, then Posts
+  useEffect(() => {
+    fetchFollowingList();
+    // eslint-disable-next-line
+  }, []); // Run once on mount
+
+  // Pagination Logic
   const throttle = (func, limit) => {
     let inThrottle;
     return function () {
@@ -81,59 +174,37 @@ const Feed = () => {
     };
   };
 
-  // --- 3. Handle Scroll Event ---
   const handleScroll = () => {
-    // Check if user has scrolled to the bottom of the feed container
     const container = document.getElementById("feed-container");
     if (!container) return;
-
     const { scrollTop, clientHeight, scrollHeight } = container;
-
-    // If we are within 50px of the bottom, load more
     if (scrollHeight - scrollTop <= clientHeight + 50) {
-        if (hasNextPage && !isFetchingRef.current) {
-            setPage((prevPage) => prevPage + 1);
-        }
+      if (hasNextPage && !isFetchingRef.current) {
+        setPage((prevPage) => prevPage + 1);
+      }
     }
   };
 
-  // Create the throttled version of the scroll handler (memoized)
-  // We use 500ms throttle - meaning we only check scroll position twice per second max
-  // eslint-disable-next-line
   const throttledScroll = useCallback(throttle(handleScroll, 500), [hasNextPage]);
 
-  // --- Effects ---
-
-  // A. Trigger Fetch when Page Number Changes
   useEffect(() => {
-    // If page is 1, we treat it as a new/initial fetch. 
-    // If page > 1, it's an append.
-    if (page === 1) {
-        fetchPosts(1, true); 
-    } else {
-        fetchPosts(page, false);
-    }
+    if (page === 1) fetchPosts(1, true);
+    else fetchPosts(page, false);
     // eslint-disable-next-line
   }, [page]);
 
-  // B. Attach Scroll Listener
   useEffect(() => {
     const container = document.getElementById("feed-container");
-    if (container) {
-        container.addEventListener("scroll", throttledScroll);
-    }
+    if (container) container.addEventListener("scroll", throttledScroll);
     return () => {
-        if (container) {
-            container.removeEventListener("scroll", throttledScroll);
-        }
+      if (container) container.removeEventListener("scroll", throttledScroll);
     };
   }, [throttledScroll]);
 
-
-  // --- Handlers ---
   const handleSearch = (e) => {
     e.preventDefault();
-    setPage(1); // Reset to page 1, which triggers the Effect A
+    fetchPosts(1, true);
+    setPage(1);
     setHasNextPage(true);
   };
 
@@ -142,209 +213,104 @@ const Feed = () => {
     setSearchQuery("");
     setPage(1);
     setHasNextPage(true);
-  };
-
-  const navigateToDetail = (postId) => {
-    navigate(`/post/${postId}`);
+    fetchPosts(1, true, "all", "");
   };
 
   return (
-    // IMPORTANT: Added ID 'feed-container' for scroll targeting
-    <div id="feed-container" className="secondary-container overflow-auto w-100" style={{height: 'calc(100vh - 60px)'}}>
-      
-      {/* --- Filter Section --- */}
+    <div id="feed-container" className="secondary-container overflow-auto w-100" style={{ height: 'calc(100vh - 60px)' }}>
+      {/* Filter Section */}
       <div className="bg-white p-4 rounded shadow-sm border-purple mb-5">
-        <h2 className="title mb-3" style={{ color: "var(--clr-purple)" }}>
-          Explore Feed
-        </h2>
-
+        <h2 className="title mb-3" style={{ color: "var(--clr-purple)" }}>Explore Feed</h2>
         <form onSubmit={handleSearch} className="row g-3 align-items-center">
           <div className="col-md-3">
-            <select
-              className="form-select border-purple"
-              value={filterType}
-              onChange={(e) => {
-                setFilterType(e.target.value);
-                setSearchQuery("");
-              }}
-            >
+            <select className="form-select border-purple" value={filterType} onChange={(e) => { setFilterType(e.target.value); setSearchQuery(""); }}>
               <option value="all">All Posts</option>
               <option value="username">By Username</option>
               <option value="tag">By Tag Name</option>
             </select>
           </div>
-
           <div className="col-md-6">
-            <input
-              type="text"
-              className="form-control border-purple"
-              placeholder={
-                filterType === "username"
-                  ? "Enter username..."
-                  : filterType === "tag"
-                  ? "Enter tag..."
-                  : "Showing all posts..."
-              }
-              disabled={filterType === "all"}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+            <input type="text" className="form-control border-purple" placeholder={filterType === "username" ? "Enter username..." : filterType === "tag" ? "Enter tag..." : "Showing all posts..."} disabled={filterType === "all"} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
           </div>
-
           <div className="col-md-3 d-flex gap-2">
-            <button
-              type="submit"
-              className="btn btn-purple-sm w-100"
-              disabled={filterType !== "all" && !searchQuery.trim()}
-            >
-              Search
-            </button>
-            {filterType !== "all" && (
-              <button
-                type="button"
-                className="btn btn-secondary w-50"
-                onClick={handleReset}
-              >
-                Reset
-              </button>
-            )}
+            <button type="submit" className="btn btn-purple-sm w-100" disabled={filterType !== "all" && !searchQuery.trim()}>Search</button>
+            {filterType !== "all" && (<button type="button" className="btn btn-secondary w-50" onClick={handleReset}>Reset</button>)}
           </div>
         </form>
       </div>
 
-      {/* --- Posts Grid --- */}
+      {/* Posts Grid */}
       {posts.length === 0 && !loading ? (
         <div className="text-center mt-5 p-5 bg-light rounded">
           <h4 className="text-muted">No posts found.</h4>
-          <button className="btn btn-link link" onClick={handleReset}>
-            View all posts
-          </button>
         </div>
       ) : (
         <div className="row g-4 pb-5">
-          {posts.map((post) => (
-            <div key={post._id} className="col-lg-4 col-md-6">
-              <div
-                className="card h-100 border-0 shadow-sm cursor-pointer hover-effect"
-                onClick={() => navigateToDetail(post._id)}
-                style={{
-                  borderRadius: "15px",
-                  transition: "transform 0.2s",
-                }}
-              >
-                <div className="card-header bg-white border-0 d-flex align-items-center pt-3 px-3">
-                  <div
-                    className="profile-image"
-                    style={{
-                      width: "35px",
-                      height: "35px",
-                      marginRight: "10px",
-                    }}
-                  >
-                    <img
-                      src={
-                        post.author?.account?.avatar?.url ||
-                        "https://via.placeholder.com/50"
-                      }
-                      alt="avatar"
-                      style={{ width: "100%", height: "100%" }}
-                    />
-                  </div>
-                  <div className="d-flex flex-column" style={{ lineHeight: "1.2" }}>
-                    <span className="fw-bold text-dark">
-                      {post.author?.account?.username}
-                    </span>
-                    <small className="text-muted" style={{ fontSize: "0.75rem" }}>
-                      {post.author?.location || "Unknown location"}
-                    </small>
-                  </div>
-                </div>
+          {posts.map((post) => {
+            // LOGIC: Check if this post's author ID is in our 'followingSet'
+            // We use post.author._id (Profile ID) because that matches the following list data
+            const isFollowing = followingSet.has(post.author?._id);
+            const isOwnPost = user?._id === post.author?.account?._id;
 
-                <div
-                  style={{
-                    height: "250px",
-                    overflow: "hidden",
-                    backgroundColor: "#f8f9fa",
-                  }}
-                  className="mt-2 position-relative"
-                >
-                  {post.images && post.images.length > 0 ? (
-                    <img
-                      src={post.images[0].url}
-                      alt="post"
-                      className="w-100 h-100"
-                      style={{ objectFit: "cover" }}
-                    />
-                  ) : (
-                    <div className="d-flex align-items-center justify-content-center h-100 px-3 text-center">
-                      <p className="text-muted small">
-                        {post.content.substring(0, 100)}...
-                      </p>
+            return (
+              <div key={post._id} className="col-lg-4 col-md-6">
+                <div className="card h-100 border-0 shadow-sm cursor-pointer hover-effect" onClick={() => navigate(`/post/${post._id}`)} style={{ borderRadius: "15px", transition: "transform 0.2s" }}>
+                  
+                  {/* Header */}
+                  <div className="card-header bg-white border-0 d-flex justify-content-between align-items-center pt-3 px-3">
+                    <div className="d-flex align-items-center">
+                      <div className="profile-image" style={{ width: "35px", height: "35px", marginRight: "10px" }}>
+                          <img src={post.author?.account?.avatar?.url || "https://cdn-icons-png.flaticon.com/512/149/149071.png"} alt="avatar" style={{ width: "100%", height: "100%", borderRadius: "50%" }} />
+                      </div>
+                      <div className="d-flex flex-column" style={{ lineHeight: "1.2" }}>
+                          <span className="fw-bold text-dark">{post.author?.account?.username}</span>
+                          <small className="text-muted" style={{ fontSize: "0.75rem" }}>{post.author?.location || "Unknown"}</small>
+                      </div>
                     </div>
-                  )}
-                  {post.images && post.images.length > 1 && (
-                    <span className="position-absolute top-0 end-0 m-2 badge bg-dark opacity-75">
-                      <i className="fa-regular fa-images me-1"></i>
-                      {post.images.length}
-                    </span>
-                  )}
-                </div>
-
-                <div className="card-body">
-                  <div className="d-flex justify-content-between mb-2">
-                    <div className="text-muted">
-                      <i className="fa-regular fa-heart me-1"></i> {post.likes}
-                    </div>
-                    <div className="text-muted">
-                      <i className="fa-regular fa-comment me-1"></i>{" "}
-                      {post.comments}
-                    </div>
+                    
+                    {/* BUTTON LOGIC */}
+                    {!isOwnPost && (
+                       <button 
+                          className={`btn btn-sm ${isFollowing ? 'btn-secondary' : 'btn-purple-sm'} px-3`}
+                          style={{fontSize: '0.8rem', paddingBlock: '4px'}}
+                          // We pass Profile ID (for local update) AND Account ID (for API call)
+                          onClick={(e) => handleFollowToggle(e, post.author?._id, post.author?.account?._id)}
+                       >
+                          {isFollowing ? 'Following' : 'Follow'}
+                       </button>
+                    )}
                   </div>
 
-                  <p
-                    className="card-text text-secondary mb-2"
-                    style={{
-                      display: "-webkit-box",
-                      WebkitLineClamp: "2",
-                      WebkitBoxOrient: "vertical",
-                      overflow: "hidden",
-                      fontSize: "0.9rem",
-                    }}
-                  >
-                    {post.content}
-                  </p>
+                  {/* Image */}
+                  <div style={{ height: "250px", overflow: "hidden", backgroundColor: "#f8f9fa" }} className="mt-2 position-relative">
+                    {post.images && post.images.length > 0 ? (
+                      <img src={post.images[0].url} alt="post" className="w-100 h-100" style={{ objectFit: "cover" }} />
+                    ) : (
+                      <div className="d-flex align-items-center justify-content-center h-100 px-3 text-center"><p className="text-muted small">{post.content.substring(0, 100)}...</p></div>
+                    )}
+                  </div>
 
-                  <div className="d-flex flex-wrap gap-1 mt-2">
-                    {post.tags.slice(0, 3).map((tag, i) => (
-                      <span
-                        key={i}
-                        className="badge bg-purple-light text-dark fw-normal"
-                        style={{ fontSize: "0.7rem" }}
-                      >
-                        #{tag}
-                      </span>
-                    ))}
+                  {/* Footer */}
+                  <div className="card-body">
+                    <div className="d-flex justify-content-between align-items-center mb-2">
+                      <div className="d-flex gap-3">
+                          <small className="text-muted"><i className="fa-regular fa-heart me-1"></i> {post.likes}</small>
+                          <small className="text-muted"><i className="fa-regular fa-comment me-1"></i> {post.comments}</small>
+                      </div>
+                      <i className={`fa-bookmark ${post.isBookmarked ? 'fa-solid' : 'fa-regular'}`} onClick={(e) => handleBookmark(e, post._id)} style={{cursor: 'pointer', fontSize: '1.2rem', color: post.isBookmarked ? 'var(--clr-purple)' : '#6c757d'}}></i>
+                    </div>
+                    <p className="card-text text-secondary mb-2" style={{ display: "-webkit-box", WebkitLineClamp: "2", WebkitBoxOrient: "vertical", overflow: "hidden", fontSize: "0.9rem" }}>{post.content}</p>
+                    <div className="d-flex flex-wrap gap-1 mt-2">
+                      {post.tags && post.tags.slice(0, 3).map((tag, i) => (<span key={i} className="badge bg-purple-light text-dark fw-normal" style={{ fontSize: "0.7rem" }}>#{tag}</span>))}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
-
-      {/* Loading Indicator at Bottom */}
-      {loading && (
-        <div className="text-center py-4">
-          <div className="spinner-border text-primary" role="status"></div>
-          <p className="text-muted small">Loading more posts...</p>
-        </div>
-      )}
-      
-      {!hasNextPage && posts.length > 0 && (
-         <div className="text-center py-4 text-muted">
-            <small>You have reached the end.</small>
-         </div>
-      )}
+      {loading && <div className="text-center py-4"><div className="spinner-border text-primary"></div></div>}
     </div>
   );
 };

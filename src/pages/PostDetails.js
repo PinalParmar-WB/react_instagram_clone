@@ -282,7 +282,7 @@ const PostDetails = () => {
             <div className="d-flex align-items-center border-bottom pb-3 mb-3">
               <div className="profile-image me-3">
                 <img
-                  src={post.author.account.avatar.url}
+                  src={post.author?.account?.avatar?.url || "https://cdn-icons-png.flaticon.com/512/149/149071.png"}
                   alt={post.author.account.username}
                 />
               </div>
@@ -358,7 +358,7 @@ const PostDetails = () => {
                     <div key={comment._id} className="d-flex gap-2 mb-3 align-items-start">
                       <div className="profile-image" style={{width:'35px', height:'35px', flexShrink:0}}>
                         <img
-                          src={comment.author?.account?.avatar?.url}
+                          src={comment.author?.account?.avatar?.url || "https://cdn-icons-png.flaticon.com/512/149/149071.png"}
                           alt="avatar"
                           style={{width:'100%', height:'100%'}}
                         />

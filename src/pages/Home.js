@@ -1,19 +1,28 @@
-import { use, useEffect } from "react";
-import { useDispatch, useSelector } from "react-redux";
-import { Link, Outlet, useNavigate } from "react-router-dom";
-import { removeUser } from "../store/authSlice";
-import useFetchUserProfile from "../hooks/useFetchUserProfile";
+// 1. Remove 'use' (it's not needed). Keep 'useEffect' for the safety check.
+import { useEffect } from 'react'; 
+import { useDispatch, useSelector } from 'react-redux';
+import { Link, Outlet, useNavigate } from 'react-router-dom';
+import { removeUser } from '../store/authSlice';
 
 const Home = () => {
-  useFetchUserProfile();
-  const user = useSelector(store => store.auth.user);
+  const user = useSelector((store) => store.auth.user);
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
+  // 2. SAFETY CHECK: If user is null (e.g. after refresh), send back to login
+  useEffect(() => {
+    if (!user) {
+      navigate('/login');
+    }
+  }, [user, navigate]);
+
   const handleLogout = () => {
-    dispatch(removeUser()); // Clears Redux and LocalStorage (if you added logic in slice)
+    dispatch(removeUser());
     navigate('/login');
   };
+
+  // Prevent rendering if user is missing (stops "Cannot read properties of null")
+  if (!user) return null; 
 
   return (
     <div>
@@ -59,10 +68,30 @@ const Home = () => {
                 <span className="ms-2">Create</span>
               </div>
             </Link>
+            <Link to="/bookmarks" className="link">
+              <div className="nav-item ms-2">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="22"
+                  height="22"
+                  fill="currentColor"
+                  className="bi bi-bookmark"
+                  viewBox="0 0 16 16"
+                >
+                  <path d="M2 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v13.5a.5.5 0 0 1-.777.416L8 13.101l-5.223 2.815A.5.5 0 0 1 2 15.5zm2-1a1 1 0 0 0-1 1v12.566l4.723-2.482a.5.5 0 0 1 .554 0L13 14.566V2a1 1 0 0 0-1-1z" />
+                </svg>
+                <span className="ms-2">Saved Posts</span>
+              </div>
+            </Link>
             <Link to="/profile" className="link">
               <div className="nav-item d-flex align-items-center">
-                <div className="profile-image">
-                  <img src={user.avatar.url} alt='profile'/>
+                {/* 3. Added overflow hidden and object-fit to prevent image distortion */}
+                <div className="profile-image" style={{overflow: 'hidden', borderRadius: '50%'}}>
+                  <img 
+                    src={user.avatar?.url || "https://cdn-icons-png.flaticon.com/512/149/149071.png"} 
+                    alt="profile" 
+                    style={{width: '100%', height: '100%', objectFit: 'cover'}}
+                  />
                 </div>
                 <span className="ms-2">Profile</span>
               </div>
@@ -93,12 +122,10 @@ const Home = () => {
         </div>
 
         {/* CONTENT AREA (White Space - Right Side) */}
-        {/* 2. Place Outlet here. This is where Feed or Profile will load */}
         <div className="secondary-container">
           <Outlet />
         </div>
       </div>
-      
     </div>
   );
 };

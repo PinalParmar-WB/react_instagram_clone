@@ -2,7 +2,6 @@ import React, { useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux';
 import { Link, useNavigate } from 'react-router-dom';
 import { setUserProfile, setUser } from '../store/authSlice';
-import useFetchUserProfile from '../hooks/useFetchUserProfile';
 
 const ProfileEdit = () => {
   const dispatch = useDispatch();

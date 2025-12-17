@@ -8,6 +8,10 @@ import Feed from './pages/Feed';
 import ProfileEdit from './pages/ProfileEdit';
 import CreatePost from './pages/CreatePost';
 import PostDetails from './pages/PostDetails';
+import BookmarkedPosts from './pages/BookmarkedPosts';
+import Followers from './pages/Followers';
+import Following from './pages/Following';
+import EditPost from './pages/EditPost';
 
 export default function App() {
   const { user } = useSelector((store) => store.auth);
@@ -80,6 +84,10 @@ export default function App() {
             <Route path="/profile-edit" element={<ProfileEdit />} />
             <Route path="/create-post" element={<CreatePost />} />
             <Route path="/post/:id" element={<PostDetails />} />
+            <Route path="/bookmarks" element={<BookmarkedPosts />} />
+            <Route path="/followers" element={<Followers />} />
+            <Route path="/following" element={<Following />} />
+            <Route path="/post/edit/:postId" element={<EditPost />} />
         </Route>
       </Routes>
     </div>
